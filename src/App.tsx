@@ -1,92 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { format, addMinutes, parse, isAfter, isBefore, startOfDay, addDays } from 'date-fns';
-import { Moon, Sun, MapPin, Clock, Calendar as CalendarIcon, ChevronDown, BookOpen, ExternalLink, Share2, Printer, Sparkles, Search } from 'lucide-react';
+import { Moon, Sun, MapPin, Clock, Calendar as CalendarIcon, ChevronDown, BookOpen, ExternalLink, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { GoogleGenAI, Type } from "@google/genai";
 import { districts, dhakaRamadan2026, type District, type RamadanDay, duas } from './data/ramadanData';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-const getApiKey = () => {
-  try {
-    return process.env.GEMINI_API_KEY || "";
-  } catch (e) {
-    return "";
-  }
-};
-
-let aiInstance: GoogleGenAI | null = null;
-const getAi = () => {
-  const key = getApiKey();
-  if (!key) return null;
-  if (!aiInstance) {
-    aiInstance = new GoogleGenAI({ apiKey: key });
-  }
-  return aiInstance;
-};
-
 export default function App() {
   const [selectedDistrict, setSelectedDistrict] = useState<District>(districts[0]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isDistrictMenuOpen, setIsDistrictMenuOpen] = useState(false);
   const [districtSearch, setDistrictSearch] = useState('');
-  const [hadith, setHadith] = useState<{ text: string; reference: string } | null>(null);
-  const [isLoadingHadith, setIsLoadingHadith] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    async function fetchHadith() {
-      const ai = getAi();
-      if (!ai) {
-        console.warn("GEMINI_API_KEY is missing. Hadith feature disabled.");
-        return;
-      }
-      
-      setIsLoadingHadith(true);
-      try {
-        const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: "Provide a short, inspiring Hadith related to Ramadan or fasting in Bengali. Include the text in Bengali and its reference.",
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                text: { type: Type.STRING, description: "The Hadith text in Bengali" },
-                reference: { type: Type.STRING, description: "The source reference of the Hadith" }
-              },
-              required: ["text", "reference"]
-            }
-          }
-        });
-        
-        const data = JSON.parse(response.text || "{}");
-        if (data.text && data.reference) {
-          setHadith({
-            text: data.text,
-            reference: data.reference
-          });
-        } else {
-          setHadith({
-            text: "রোজা একটি ঢালস্বরূপ।",
-            reference: "সহীহ বুখারী"
-          });
-        }
-      } catch (error) {
-        console.error("Failed to fetch Hadith:", error);
-      } finally {
-        setIsLoadingHadith(false);
-      }
-    }
-    fetchHadith();
   }, []);
 
   const filteredDistricts = useMemo(() => {
@@ -357,32 +289,6 @@ export default function App() {
           </motion.div>
         </section>
 
-        {/* Hadith of the Day */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="bg-ramadan-gold/10 rounded-3xl p-8 border border-ramadan-gold/20 text-center"
-        >
-          <div className="flex items-center justify-center gap-2 text-ramadan-gold mb-4">
-            <Sparkles className="w-4 h-4" />
-            <span className="text-xs uppercase tracking-widest font-bold">Hadith of the Day</span>
-          </div>
-          {isLoadingHadith ? (
-            <div className="animate-pulse space-y-2">
-              <div className="h-4 bg-ramadan-gold/20 w-3/4 mx-auto rounded" />
-              <div className="h-4 bg-ramadan-gold/20 w-1/2 mx-auto rounded" />
-            </div>
-          ) : hadith ? (
-            <div className="max-w-3xl mx-auto">
-              <p className="text-xl md:text-2xl font-serif italic text-ramadan-green mb-4">
-                "{hadith.text}"
-              </p>
-              <p className="text-xs font-bold uppercase tracking-widest opacity-40">— {hadith.reference}</p>
-            </div>
-          ) : null}
-        </motion.section>
-
         {/* Calendar Grid */}
         <section>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -391,7 +297,7 @@ export default function App() {
               <h2 className="text-3xl font-serif font-bold">Full Calendar</h2>
             </div>
             <div className="flex items-center gap-4">
-              <div className="hidden md:flex items-center gap-4 text-xs uppercase tracking-widest font-bold text-ramadan-dark/40 mr-4">
+              <div className="hidden md:flex items-center gap-4 text-xs uppercase tracking-widest font-bold text-ramadan-dark/40">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded bg-ramadan-green/10" />
                   <span>Past</span>
@@ -401,12 +307,6 @@ export default function App() {
                   <span>Today</span>
                 </div>
               </div>
-              <button className="p-2 hover:bg-ramadan-dark/5 rounded-full transition-colors opacity-40 hover:opacity-100">
-                <Printer className="w-5 h-5" />
-              </button>
-              <button className="p-2 hover:bg-ramadan-dark/5 rounded-full transition-colors opacity-40 hover:opacity-100">
-                <Share2 className="w-5 h-5" />
-              </button>
             </div>
           </div>
 
