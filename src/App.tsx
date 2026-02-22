@@ -11,7 +11,23 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const getApiKey = () => {
+  try {
+    return process.env.GEMINI_API_KEY || "";
+  } catch (e) {
+    return "";
+  }
+};
+
+let aiInstance: GoogleGenAI | null = null;
+const getAi = () => {
+  const key = getApiKey();
+  if (!key) return null;
+  if (!aiInstance) {
+    aiInstance = new GoogleGenAI({ apiKey: key });
+  }
+  return aiInstance;
+};
 
 export default function App() {
   const [selectedDistrict, setSelectedDistrict] = useState<District>(districts[0]);
@@ -28,6 +44,12 @@ export default function App() {
 
   useEffect(() => {
     async function fetchHadith() {
+      const ai = getAi();
+      if (!ai) {
+        console.warn("GEMINI_API_KEY is missing. Hadith feature disabled.");
+        return;
+      }
+      
       setIsLoadingHadith(true);
       try {
         const response = await ai.models.generateContent({
