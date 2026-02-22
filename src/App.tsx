@@ -4,7 +4,7 @@ import { Moon, Sun, MapPin, Clock, Calendar as CalendarIcon, ChevronDown, BookOp
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { districts, dhakaRamadan2026, type District, type RamadanDay, duas } from './data/ramadanData';
 
 function cn(...inputs: ClassValue[]) {
@@ -36,11 +36,20 @@ export default function App() {
   const [districtSearch, setDistrictSearch] = useState('');
   const [hadith, setHadith] = useState<{ text: string; reference: string } | null>(null);
   const [isLoadingHadith, setIsLoadingHadith] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
 
   useEffect(() => {
     async function fetchHadith() {
@@ -54,14 +63,32 @@ export default function App() {
       try {
         const response = await ai.models.generateContent({
           model: "gemini-3-flash-preview",
-          contents: "Provide a short, inspiring Hadith related to Ramadan or fasting. Include the text in English and its reference (e.g., Sahih Bukhari). Keep it concise.",
+          contents: "Provide a short, inspiring Hadith related to Ramadan or fasting in Bengali. Include the text in Bengali and its reference.",
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                text: { type: Type.STRING, description: "The Hadith text in Bengali" },
+                reference: { type: Type.STRING, description: "The source reference of the Hadith" }
+              },
+              required: ["text", "reference"]
+            }
+          }
         });
-        const text = response.text || "";
-        const lines = text.split('\n').filter(l => l.trim());
-        setHadith({
-          text: lines[0] || "Fasting is a shield.",
-          reference: lines[1] || "Sahih Bukhari"
-        });
+        
+        const data = JSON.parse(response.text || "{}");
+        if (data.text && data.reference) {
+          setHadith({
+            text: data.text,
+            reference: data.reference
+          });
+        } else {
+          setHadith({
+            text: "রোজা একটি ঢালস্বরূপ।",
+            reference: "সহীহ বুখারী"
+          });
+        }
       } catch (error) {
         console.error("Failed to fetch Hadith:", error);
       } finally {
@@ -130,6 +157,22 @@ export default function App() {
     return { hours, minutes, seconds };
   }, [nextEvent, currentTime]);
 
+  const displayDayData = useMemo(() => {
+    const today = format(currentTime, 'yyyy-MM-dd');
+    const currentDayData = adjustedCalendar.find(d => d.date === today);
+    
+    if (!currentDayData) return adjustedCalendar[0];
+
+    const iftarTime = parse(`${currentDayData.date} ${currentDayData.iftar}`, 'yyyy-MM-dd HH:mm', new Date());
+    
+    if (isAfter(currentTime, iftarTime)) {
+      const nextDay = adjustedCalendar.find(d => d.day === currentDayData.day + 1);
+      return nextDay || currentDayData;
+    }
+    
+    return currentDayData;
+  }, [currentTime, adjustedCalendar]);
+
   const format12h = (time24h: string) => {
     if (!time24h || time24h === '--:--') return '--:--';
     const [hours, minutes] = time24h.split(':');
@@ -140,11 +183,21 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-ramadan-cream selection:bg-ramadan-gold/30">
+    <div className="min-h-screen bg-ramadan-cream dark:bg-ramadan-dark selection:bg-ramadan-gold/30 transition-colors duration-300">
       {/* Background Decoration */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-5">
-        <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full border-[40px] border-ramadan-green" />
+      <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-5 dark:opacity-[0.02]">
+        <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full border-[40px] border-ramadan-green dark:border-ramadan-gold" />
         <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full border-[40px] border-ramadan-gold" />
+      </div>
+
+      {/* Dark Mode Toggle */}
+      <div className="fixed top-6 right-6 z-50">
+        <button
+          onClick={() => setIsDarkMode(!isDarkMode)}
+          className="p-3 rounded-full bg-white dark:bg-white/10 shadow-lg border border-black/5 dark:border-white/10 text-ramadan-green dark:text-ramadan-gold hover:scale-110 transition-all"
+        >
+          {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+        </button>
       </div>
 
       {/* Header */}
@@ -159,10 +212,10 @@ export default function App() {
             <span className="uppercase tracking-[0.3em] text-xs font-semibold">Ramadan Kareem</span>
             <Moon className="w-5 h-5 fill-current scale-x-[-1]" />
           </div>
-          <h1 className="text-5xl md:text-7xl font-serif font-bold text-ramadan-green">
+          <h1 className="text-5xl md:text-7xl font-serif font-bold text-ramadan-green dark:text-ramadan-gold">
             Ramadan 2026
           </h1>
-          <p className="text-ramadan-dark/60 italic font-serif mt-2">Bangladesh Calendar</p>
+          <p className="text-ramadan-dark/60 dark:text-ramadan-cream/60 italic font-serif mt-2">Bangladesh Calendar</p>
         </motion.div>
       </header>
 
@@ -174,24 +227,24 @@ export default function App() {
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="bg-white rounded-3xl p-8 shadow-sm border border-black/5 flex flex-col justify-between"
+            className="bg-white dark:bg-white/5 rounded-3xl p-8 shadow-sm border border-black/5 dark:border-white/5 flex flex-col justify-between"
           >
             <div>
               <div className="flex items-center gap-2 text-ramadan-gold mb-4">
                 <MapPin className="w-4 h-4" />
                 <span className="text-xs uppercase tracking-widest font-bold">Location</span>
               </div>
-              <h2 className="text-3xl font-serif font-semibold mb-2">{selectedDistrict.name}</h2>
-              <p className="text-ramadan-dark/40 text-sm mb-6">{selectedDistrict.bnName} জেলা</p>
+              <h2 className="text-3xl font-serif font-semibold mb-2 dark:text-ramadan-cream">{selectedDistrict.name}</h2>
+              <p className="text-ramadan-dark/40 dark:text-ramadan-cream/40 text-sm mb-6">{selectedDistrict.bnName} জেলা</p>
             </div>
 
             <div className="relative">
               <button 
                 onClick={() => setIsDistrictMenuOpen(!isDistrictMenuOpen)}
-                className="w-full flex items-center justify-between px-4 py-3 bg-ramadan-cream rounded-xl border border-black/5 hover:border-ramadan-gold transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 bg-ramadan-cream dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/10 hover:border-ramadan-gold transition-colors"
               >
-                <span className="text-sm font-medium">Change District</span>
-                <ChevronDown className={cn("w-4 h-4 transition-transform", isDistrictMenuOpen && "rotate-180")} />
+                <span className="text-sm font-medium dark:text-ramadan-cream">Change District</span>
+                <ChevronDown className={cn("w-4 h-4 transition-transform dark:text-ramadan-cream", isDistrictMenuOpen && "rotate-180")} />
               </button>
               
               <AnimatePresence>
@@ -200,17 +253,17 @@ export default function App() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
-                    className="absolute bottom-full left-0 right-0 mb-2 max-h-80 overflow-hidden bg-white rounded-xl shadow-xl border border-black/10 z-50 flex flex-col"
+                    className="absolute bottom-full left-0 right-0 mb-2 max-h-80 overflow-hidden bg-white dark:bg-ramadan-dark rounded-xl shadow-xl border border-black/10 dark:border-white/10 z-50 flex flex-col"
                   >
-                    <div className="p-2 border-b border-black/5">
+                    <div className="p-2 border-b border-black/5 dark:border-white/5">
                       <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-ramadan-dark/30" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-ramadan-dark/30 dark:text-ramadan-cream/30" />
                         <input 
                           type="text"
                           placeholder="Search district..."
                           value={districtSearch}
                           onChange={(e) => setDistrictSearch(e.target.value)}
-                          className="w-full pl-8 pr-4 py-2 bg-ramadan-cream rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-ramadan-gold/50"
+                          className="w-full pl-8 pr-4 py-2 bg-ramadan-cream dark:bg-white/5 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-ramadan-gold/50 dark:text-ramadan-cream"
                           autoFocus
                         />
                       </div>
@@ -229,14 +282,14 @@ export default function App() {
                               "text-left px-3 py-2 rounded-lg text-sm transition-colors",
                               selectedDistrict.name === d.name 
                                 ? "bg-ramadan-green text-white" 
-                                : "hover:bg-ramadan-cream"
+                                : "hover:bg-ramadan-cream dark:hover:bg-white/10 dark:text-ramadan-cream"
                             )}
                           >
                             {d.name}
                           </button>
                         ))
                       ) : (
-                        <div className="col-span-2 py-4 text-center text-xs text-ramadan-dark/40 italic">
+                        <div className="col-span-2 py-4 text-center text-xs text-ramadan-dark/40 dark:text-ramadan-cream/40 italic">
                           No districts found
                         </div>
                       )}
@@ -251,7 +304,7 @@ export default function App() {
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="lg:col-span-2 bg-ramadan-green text-white rounded-3xl p-8 shadow-xl relative overflow-hidden"
+            className="lg:col-span-2 bg-ramadan-green dark:bg-ramadan-gold/5 text-white dark:text-ramadan-gold rounded-3xl p-8 shadow-xl relative overflow-hidden border border-transparent dark:border-ramadan-gold/20"
           >
             <div className="absolute top-0 right-0 p-8 opacity-10">
               <Clock className="w-32 h-32" />
@@ -272,21 +325,21 @@ export default function App() {
                         <span className="text-5xl md:text-7xl font-serif font-bold tabular-nums">
                           {String(timeRemaining?.hours).padStart(2, '0')}
                         </span>
-                        <span className="text-[10px] uppercase tracking-widest opacity-50 mt-1">Hours</span>
+                        <span className="text-[10px] uppercase tracking-widest opacity-50 dark:text-ramadan-gold/50 mt-1">Hours</span>
                       </div>
                       <span className="text-4xl md:text-6xl font-serif opacity-30 pb-2">:</span>
                       <div className="flex flex-col">
                         <span className="text-5xl md:text-7xl font-serif font-bold tabular-nums">
                           {String(timeRemaining?.minutes).padStart(2, '0')}
                         </span>
-                        <span className="text-[10px] uppercase tracking-widest opacity-50 mt-1">Minutes</span>
+                        <span className="text-[10px] uppercase tracking-widest opacity-50 dark:text-ramadan-gold/50 mt-1">Minutes</span>
                       </div>
                       <span className="text-4xl md:text-6xl font-serif opacity-30 pb-2">:</span>
                       <div className="flex flex-col">
                         <span className="text-5xl md:text-7xl font-serif font-bold tabular-nums">
                           {String(timeRemaining?.seconds).padStart(2, '0')}
                         </span>
-                        <span className="text-[10px] uppercase tracking-widest opacity-50 mt-1">Seconds</span>
+                        <span className="text-[10px] uppercase tracking-widest opacity-50 dark:text-ramadan-gold/50 mt-1">Seconds</span>
                       </div>
                     </div>
                   </>
@@ -295,26 +348,26 @@ export default function App() {
                 )}
               </div>
 
-              <div className="mt-8 flex items-center gap-6 pt-6 border-t border-white/10">
+              <div className="mt-8 flex items-center gap-6 pt-6 border-t border-white/10 dark:border-ramadan-gold/10">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-full bg-white/5 dark:bg-ramadan-gold/10 flex items-center justify-center">
                     <Sun className="w-5 h-5 text-ramadan-gold" />
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase tracking-widest opacity-50">Sehri Ends</p>
+                    <p className="text-[10px] uppercase tracking-widest opacity-50 dark:text-ramadan-gold/50">Sehri Ends</p>
                     <p className="text-xl font-serif font-bold">
-                      {format12h(adjustedCalendar.find(d => d.date === format(currentTime, 'yyyy-MM-dd'))?.sehri || '--:--')}
+                      {format12h(displayDayData?.sehri || '--:--')}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-full bg-white/5 dark:bg-ramadan-gold/10 flex items-center justify-center">
                     <Moon className="w-5 h-5 text-ramadan-gold" />
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase tracking-widest opacity-50">Iftar Starts</p>
+                    <p className="text-[10px] uppercase tracking-widest opacity-50 dark:text-ramadan-gold/50">Iftar Starts</p>
                     <p className="text-xl font-serif font-bold">
-                      {format12h(adjustedCalendar.find(d => d.date === format(currentTime, 'yyyy-MM-dd'))?.iftar || '--:--')}
+                      {format12h(displayDayData?.iftar || '--:--')}
                     </p>
                   </div>
                 </div>
@@ -328,7 +381,7 @@ export default function App() {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="bg-ramadan-gold/10 rounded-3xl p-8 border border-ramadan-gold/20 text-center"
+          className="bg-ramadan-gold/10 dark:bg-ramadan-gold/5 rounded-3xl p-8 border border-ramadan-gold/20 dark:border-ramadan-gold/10 text-center"
         >
           <div className="flex items-center justify-center gap-2 text-ramadan-gold mb-4">
             <Sparkles className="w-4 h-4" />
@@ -341,10 +394,10 @@ export default function App() {
             </div>
           ) : hadith ? (
             <div className="max-w-3xl mx-auto">
-              <p className="text-xl md:text-2xl font-serif italic text-ramadan-green mb-4">
+              <p className="text-xl md:text-2xl font-serif italic text-ramadan-green dark:text-ramadan-gold mb-4">
                 "{hadith.text}"
               </p>
-              <p className="text-xs font-bold uppercase tracking-widest opacity-40">— {hadith.reference}</p>
+              <p className="text-xs font-bold uppercase tracking-widest opacity-40 dark:text-ramadan-cream/40">— {hadith.reference}</p>
             </div>
           ) : null}
         </motion.section>
@@ -354,12 +407,12 @@ export default function App() {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
             <div className="flex items-center gap-3">
               <CalendarIcon className="w-6 h-6 text-ramadan-gold" />
-              <h2 className="text-3xl font-serif font-bold">Full Calendar</h2>
+              <h2 className="text-3xl font-serif font-bold dark:text-ramadan-cream">Full Calendar</h2>
             </div>
             <div className="flex items-center gap-4">
-              <div className="hidden md:flex items-center gap-4 text-xs uppercase tracking-widest font-bold text-ramadan-dark/40 mr-4">
+              <div className="hidden md:flex items-center gap-4 text-xs uppercase tracking-widest font-bold text-ramadan-dark/40 dark:text-ramadan-cream/40 mr-4">
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded bg-ramadan-green/10" />
+                  <div className="w-3 h-3 rounded bg-ramadan-green/10 dark:bg-white/5" />
                   <span>Past</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -367,12 +420,6 @@ export default function App() {
                   <span>Today</span>
                 </div>
               </div>
-              <button className="p-2 hover:bg-ramadan-dark/5 rounded-full transition-colors opacity-40 hover:opacity-100">
-                <Printer className="w-5 h-5" />
-              </button>
-              <button className="p-2 hover:bg-ramadan-dark/5 rounded-full transition-colors opacity-40 hover:opacity-100">
-                <Share2 className="w-5 h-5" />
-              </button>
             </div>
           </div>
 
@@ -388,10 +435,10 @@ export default function App() {
                   className={cn(
                     "relative p-6 rounded-2xl border transition-all duration-300",
                     isToday 
-                      ? "bg-white border-ramadan-gold shadow-lg ring-1 ring-ramadan-gold/20" 
+                      ? "bg-white dark:bg-white/10 border-ramadan-gold shadow-lg ring-1 ring-ramadan-gold/20" 
                       : isPast 
-                        ? "bg-ramadan-dark/5 border-transparent opacity-60" 
-                        : "bg-white border-black/5 hover:border-ramadan-gold/30 shadow-sm"
+                        ? "bg-ramadan-dark/5 dark:bg-white/5 border-transparent opacity-60" 
+                        : "bg-white dark:bg-white/5 border-black/5 dark:border-white/5 hover:border-ramadan-gold/30 shadow-sm"
                   )}
                 >
                   {isToday && (
@@ -402,31 +449,31 @@ export default function App() {
                   
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <span className="text-3xl font-serif font-bold text-ramadan-green">
+                      <span className="text-3xl font-serif font-bold text-ramadan-green dark:text-ramadan-gold">
                         {day.day}
                       </span>
-                      <span className="text-[10px] uppercase tracking-widest font-bold ml-1 opacity-40">Ramadan</span>
+                      <span className="text-[10px] uppercase tracking-widest font-bold ml-1 opacity-40 dark:text-ramadan-cream/40">Ramadan</span>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-medium">{day.banglaDate}</p>
-                      <p className="text-[10px] opacity-40">{day.banglaDay}</p>
+                      <p className="text-xs font-medium dark:text-ramadan-cream">{day.banglaDate}</p>
+                      <p className="text-[10px] opacity-40 dark:text-ramadan-cream/40">{day.banglaDay}</p>
                     </div>
                   </div>
 
                   <div className="space-y-3">
                     <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2 opacity-60">
+                      <div className="flex items-center gap-2 opacity-60 dark:text-ramadan-cream/60">
                         <Sun className="w-3 h-3" />
                         <span>Sehri</span>
                       </div>
-                      <span className="font-serif font-bold">{format12h(day.sehri)}</span>
+                      <span className="font-serif font-bold dark:text-ramadan-cream">{format12h(day.sehri)}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2 opacity-60">
+                      <div className="flex items-center gap-2 opacity-60 dark:text-ramadan-cream/60">
                         <Moon className="w-3 h-3" />
                         <span>Iftar</span>
                       </div>
-                      <span className="font-serif font-bold">{format12h(day.iftar)}</span>
+                      <span className="font-serif font-bold dark:text-ramadan-cream">{format12h(day.iftar)}</span>
                     </div>
                   </div>
                 </motion.div>
@@ -443,32 +490,32 @@ export default function App() {
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="bg-white rounded-3xl p-8 border border-black/5 shadow-sm"
+              className="bg-white dark:bg-white/5 rounded-3xl p-8 border border-black/5 dark:border-white/5 shadow-sm"
             >
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-full bg-ramadan-cream flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full bg-ramadan-cream dark:bg-white/5 flex items-center justify-center">
                   <BookOpen className="w-5 h-5 text-ramadan-gold" />
                 </div>
-                <h3 className="text-xl font-serif font-bold">{dua.title}</h3>
+                <h3 className="text-xl font-serif font-bold dark:text-ramadan-cream">{dua.title}</h3>
               </div>
               
               <div className="space-y-6">
-                <p className="text-3xl font-serif text-right leading-loose text-ramadan-green" dir="rtl">
+                <p className="text-3xl font-serif text-right leading-loose text-ramadan-green dark:text-ramadan-gold" dir="rtl">
                   {dua.arabic}
                 </p>
                 
                 <div className="space-y-4">
                   <div>
                     <p className="text-[10px] uppercase tracking-widest font-bold text-ramadan-gold mb-1">Bangla</p>
-                    <p className="text-sm font-medium leading-relaxed">{dua.bangla}</p>
+                    <p className="text-sm font-medium leading-relaxed dark:text-ramadan-cream">{dua.bangla}</p>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase tracking-widest font-bold text-ramadan-gold mb-1">Transliteration</p>
-                    <p className="text-sm italic opacity-70 leading-relaxed">{dua.transliteration}</p>
+                    <p className="text-sm italic opacity-70 leading-relaxed dark:text-ramadan-cream/70">{dua.transliteration}</p>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase tracking-widest font-bold text-ramadan-gold mb-1">English Translation</p>
-                    <p className="text-sm opacity-70 leading-relaxed">{dua.translation}</p>
+                    <p className="text-sm opacity-70 leading-relaxed dark:text-ramadan-cream/70">{dua.translation}</p>
                   </div>
                 </div>
               </div>
@@ -477,8 +524,8 @@ export default function App() {
         </section>
 
         {/* Footer Info */}
-        <footer className="pt-12 border-t border-black/5 text-center space-y-4">
-          <p className="text-sm text-ramadan-dark/40 max-w-2xl mx-auto">
+        <footer className="pt-12 border-t border-black/5 dark:border-white/5 text-center space-y-4">
+          <p className="text-sm text-ramadan-dark/40 dark:text-ramadan-cream/40 max-w-2xl mx-auto">
             Timings are based on the Islamic Foundation Bangladesh standards for Dhaka. 
             District offsets are approximate. Please consult your local mosque for precise timings.
           </p>
