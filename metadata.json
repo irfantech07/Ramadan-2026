@@ -1,0 +1,5 @@
+{
+  "name": "Ramadan Calendar 2026 - Bangladesh",
+  "description": "A comprehensive Ramadan calendar for Bangladesh with district-wise Sehri and Iftar timings, countdowns, and essential duas.",
+  "requestFramePermissions": ["geolocation"]
+}
