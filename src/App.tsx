@@ -417,7 +417,7 @@ export default function App() {
             District offsets are approximate. Please consult your local mosque for precise timings.
           </p>
           <div className="flex items-center justify-center gap-6 text-xs font-bold uppercase tracking-widest text-ramadan-gold">
-            <span>© ২০২৬ ডিজাইন ও ডেভেলপমেন্ট: Md. Irfan</span>
+            <span>©Create with Love by Md. Irfan</span>
           </div>
         </footer>
       </main>
